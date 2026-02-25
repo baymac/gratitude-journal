@@ -5,7 +5,7 @@ A minimal dark-themed gratitude journal app that stores entries in Notion.
 Each entry captures:
 - **Day number & date**
 - **How you're feeling**
-- **A mistake that led to a positive experience**
+- **An AI-generated reflection question**
 - **What you're grateful for**
 
 ## Setup
