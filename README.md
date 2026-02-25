@@ -58,6 +58,16 @@ Open [http://localhost:3000](http://localhost:3000)
 
 The app automatically creates a "Gratitude Entries" database inside your Notion page on first use.
 
+## Screenshots
+
+### Home (Entries List)
+
+![Home screen](docs/screenshots/app-home.png)
+
+### Add New Entry
+
+![Add new entry screen](docs/screenshots/app-new-entry.png)
+
 ## Tech Stack
 
 - **Frontend:** HTML, CSS, vanilla JS
