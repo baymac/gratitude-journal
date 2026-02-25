@@ -89,7 +89,9 @@
 
       <div class="form-group">
         <label>Today I'm grateful for</label>
-        <textarea id="f-grateful" rows="5" placeholder="List what you're grateful for..."></textarea>
+        <div id="grateful-items" class="grateful-items" aria-live="polite"></div>
+        <button type="button" id="grateful-add-btn" class="add-item-btn">+ Add item</button>
+        <div id="grateful-limit-note" class="grateful-limit-note"></div>
       </div>
 
       <input type="hidden" id="f-id" />

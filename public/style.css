@@ -90,7 +90,7 @@ body {
 
 /* ─── Header ─── */
 header {
-  padding: 52px 0 40px;
+  padding: 28px 0 16px;
 }
 
 .header-row {
@@ -126,9 +126,7 @@ header {
 }
 
 .header-rule {
-  margin-top: 20px;
-  display: flex;
-  align-items: center;
+  display: none;
 }
 
 .header-rule span {
@@ -166,7 +164,8 @@ header {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding-bottom: 100px;
+  padding-bottom: 56px;
+  border-top: 1px solid var(--border);
 }
 
 .entry-card {
@@ -179,10 +178,6 @@ header {
   border-bottom: 1px solid var(--border);
   transition: background 0.15s;
   position: relative;
-}
-
-.entry-card:first-child {
-  border-top: 1px solid var(--border);
 }
 
 .entry-card:hover {
@@ -284,7 +279,7 @@ header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 32px 0 8px;
+  padding: 16px 0 6px;
 }
 
 .back-btn {
@@ -349,13 +344,13 @@ header {
 
 /* ─── Detail View ─── */
 #detail-content {
-  padding: 16px 0 60px;
+  padding: 6px 0 40px;
 }
 
 .detail-hero {
-  margin-bottom: 48px;
-  padding-bottom: 32px;
-  border-bottom: 1px solid var(--border);
+  margin-bottom: 26px;
+  padding-bottom: 18px;
+  border-bottom: none;
 }
 
 .detail-day-num {
@@ -378,7 +373,11 @@ header {
 }
 
 .detail-section {
-  margin-bottom: 40px;
+  margin-bottom: 26px;
+}
+
+.detail-section:last-child {
+  margin-bottom: 0;
 }
 
 .section-label {
@@ -388,7 +387,7 @@ header {
   letter-spacing: 0.1em;
   color: var(--accent);
   text-transform: uppercase;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -414,6 +413,20 @@ header {
 .section-body-empty {
   color: var(--text-tertiary);
   font-style: italic;
+}
+
+.grateful-detail-list {
+  list-style: disc;
+  padding-left: 20px;
+  margin: 0;
+  color: var(--text);
+  max-width: 65ch;
+}
+
+.grateful-detail-list li {
+  font-size: 1.05rem;
+  line-height: 1.75;
+  margin-bottom: 7px;
 }
 
 /* ─── Form ─── */
@@ -508,6 +521,111 @@ header {
   opacity: 0.95;
 }
 
+.grateful-items {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.grateful-item-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.grateful-item-input {
+  flex: 1;
+  width: 100%;
+  padding: 13px 14px;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 1rem;
+  line-height: 1.4;
+  font-weight: 500;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.grateful-item-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.grateful-delete-btn {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-family: var(--font-ui);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+
+.grateful-delete-btn:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.grateful-delete-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.grateful-delete-btn:disabled:hover {
+  color: var(--text-secondary);
+  border-color: var(--border);
+}
+
+.add-item-btn {
+  margin-top: 10px;
+  border: 1px dashed var(--border-light);
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.add-item-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.add-item-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.add-item-btn:disabled:hover {
+  color: var(--text-secondary);
+  border-color: var(--border-light);
+  background: transparent;
+}
+
+.grateful-limit-note {
+  margin-top: 8px;
+  font-family: var(--font-ui);
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+}
+
 .save-btn {
   width: 100%;
   padding: 14px;
@@ -585,7 +703,7 @@ header {
 
 @media (min-width: 768px) {
   header {
-    padding: 72px 0 48px;
+    padding: 40px 0 22px;
   }
 
   .title-main {
