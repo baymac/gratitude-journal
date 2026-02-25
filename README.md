@@ -52,6 +52,7 @@ Open [http://localhost:3000](http://localhost:3000)
 ## Usage
 
 - **Home** — Lists all entries sorted by date
+- **Analytics** — Scores consistency and tracks a 66-quest board with completion checkmarks
 - **+ button** — Create a new entry
 - **Click an entry** — View full details
 - **Edit / Delete** — Available on each entry's detail view

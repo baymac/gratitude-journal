@@ -9,6 +9,9 @@ const {
 	InMemoryQuestionStore,
 	PromptPipeline,
 } = require("./lib/reflection-prompt/pipeline");
+const {
+	analyzeJournalGame,
+} = require("./lib/journal-analytics/gameTheory");
 
 const OLLAMA_MODEL = "gemma3:1b";
 const OLLAMA_BASE_URL = "http://localhost:11434";
@@ -360,6 +363,24 @@ app.get("/api/entries", async (req, res) => {
 		res.json(entries);
 	} catch (err) {
 		console.error(err);
+		res.status(500).json({ error: err.message });
+	}
+});
+
+// Strategy-based journaling analytics
+app.get("/api/analytics", async (req, res) => {
+	try {
+		const { dataSourceId: dsId } = await getOrCreateDatabase();
+		const response = await notion.dataSources.query({
+			data_source_id: dsId,
+			sorts: [{ property: "Date", direction: "ascending" }],
+		});
+
+		const entries = response.results.map((page) => mapNotionPageToEntry(page));
+		const analytics = analyzeJournalGame(entries);
+		res.json(analytics);
+	} catch (err) {
+		console.error("Analytics generation failed:", err.message);
 		res.status(500).json({ error: err.message });
 	}
 });

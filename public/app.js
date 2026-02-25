@@ -2,16 +2,25 @@ let entries = [];
 let currentId = null;
 let currentReflectionQuestion = "";
 let currentReflectionPrompt = "";
+let currentAnalytics = null;
 let gratefulItems = [""];
 const MAX_GRATEFUL_ITEMS = 25;
+const STORAGE_KEYS = {
+  entries: "gratitude.entries.cache.v1",
+  analytics: "gratitude.analytics.cache.v2",
+  questState: "gratitude.quest.state.v1",
+};
 
 // Views
 const listView = document.getElementById("list-view");
 const detailView = document.getElementById("detail-view");
 const formView = document.getElementById("form-view");
+const analyticsView = document.getElementById("analytics-view");
 
 function showView(view) {
-  [listView, detailView, formView].forEach((v) => v.classList.remove("active"));
+  [listView, detailView, formView, analyticsView].forEach((v) => {
+    if (v) v.classList.remove("active");
+  });
   view.classList.add("active");
   window.scrollTo(0, 0);
 }
@@ -33,6 +42,68 @@ function toggleTheme() {
 
 function looksLikePromptMeta(text) {
   return /^\s*Theme:/i.test(String(text || ""));
+}
+
+function readStoredJson(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeStoredJson(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {}
+}
+
+function levelFromXpLocal(xp) {
+  const val = Number(xp || 0);
+  if (val >= 3200) return "Diamond";
+  if (val >= 1900) return "Gold";
+  if (val >= 900) return "Silver";
+  return "Bronze";
+}
+
+function mergeAnalyticsWithLocalState(analytics) {
+  if (!analytics || !Array.isArray(analytics.quests)) return analytics;
+
+  const questState = readStoredJson(STORAGE_KEYS.questState, {});
+  const today = todayStr();
+  const mergedQuests = analytics.quests.map((quest) => {
+    const local = questState[quest.id] || {};
+    const done = Boolean(quest.done || local.done);
+    const completedOn = local.completedOn || (done ? today : "");
+    if (done) {
+      questState[quest.id] = { done: true, completedOn };
+    }
+    return {
+      ...quest,
+      done,
+      completedOn,
+    };
+  });
+
+  writeStoredJson(STORAGE_KEYS.questState, questState);
+
+  const completed = mergedQuests.filter((quest) => quest.done);
+  const questXp = completed.reduce((sum, quest) => sum + Number(quest.rewardXp || 0), 0);
+  const baseXp = Number(analytics.gamification?.xp || 0);
+  const totalXp = baseXp + questXp;
+
+  return {
+    ...analytics,
+    quests: mergedQuests,
+    gamification: {
+      ...(analytics.gamification || {}),
+      xp: totalXp,
+      level: levelFromXpLocal(totalXp),
+      completedQuests: completed.length,
+      totalQuests: mergedQuests.length,
+    },
+  };
 }
 
 function gratefulItemsFromText(text) {
@@ -201,46 +272,230 @@ async function loadEntries() {
   const list = document.getElementById("entries-list");
   list.innerHTML = '<div class="loading">Loading<span class="loading-dots"></span></div>';
 
-  try {
-    const res = await fetch("/api/entries");
-    entries = await res.json();
+  const cachedEntries = readStoredJson(STORAGE_KEYS.entries, []);
+  const cachedAnalyticsRaw = readStoredJson(STORAGE_KEYS.analytics, null);
+  const cachedAnalytics = mergeAnalyticsWithLocalState(cachedAnalyticsRaw);
+  if (Array.isArray(cachedEntries) && cachedEntries.length) {
+    entries = cachedEntries;
+    renderEntriesList();
+  }
+  currentAnalytics = cachedAnalytics;
+  updateAnalyticsButton(cachedAnalytics, entries.length);
 
-    if (entries.length === 0) {
-      list.innerHTML = `
-        <div class="empty-state">
-          <div class="empty-state-icon">&mdash;</div>
-          <p>No entries yet.<br/>Begin your gratitude journey.</p>
-        </div>`;
-      return;
+  try {
+    const [entriesRes, analyticsRes] = await Promise.all([
+      fetch("/api/entries"),
+      fetch("/api/analytics").catch(() => null),
+    ]);
+
+    entries = await entriesRes.json();
+
+    let analyticsRaw = null;
+    if (analyticsRes && analyticsRes.ok) {
+      analyticsRaw = await analyticsRes.json();
+    }
+    const analytics = mergeAnalyticsWithLocalState(analyticsRaw);
+    currentAnalytics = analytics;
+    updateAnalyticsButton(analytics, entries.length);
+
+    writeStoredJson(STORAGE_KEYS.entries, entries);
+    if (analyticsRaw) {
+      writeStoredJson(STORAGE_KEYS.analytics, analyticsRaw);
     }
 
-    list.innerHTML = entries
-      .map(
-        (e) => `
-      <div class="entry-card" onclick="showDetail('${e.id}')">
-        <div class="entry-day">Day ${e.day}</div>
-        <div class="entry-body">
-          <div class="entry-feeling">${escapeHtml(e.feeling) || "No feeling recorded"}</div>
-          ${
-            e.gratefulFor
-              ? `<div class="entry-grateful-preview">${escapeHtml(
-                  truncate(gratefulItemsFromText(e.gratefulFor).join(" • "), 70)
-                )}</div>`
-              : ""
-          }
-        </div>
-        <div class="entry-date">${formatDate(e.date)}</div>
-      </div>`
-      )
-      .join("");
+    renderEntriesList();
   } catch (err) {
-    list.innerHTML = `<div class="empty-state"><p>Could not load entries.</p><p>${escapeHtml(err.message)}</p></div>`;
+    if (!entries.length) {
+      currentAnalytics = null;
+      updateAnalyticsButton(null, 0);
+      list.innerHTML = `<div class="empty-state"><p>Could not load entries.</p><p>${escapeHtml(err.message)}</p></div>`;
+    }
   }
 }
 
 function truncate(str, len) {
   if (!str) return "";
   return str.length > len ? str.slice(0, len) + "\u2026" : str;
+}
+
+function scoreTone(value, lowIsGood = false) {
+  const score = Number(value || 0);
+  if (lowIsGood) {
+    if (score <= 35) return "tone-good";
+    if (score <= 65) return "tone-mid";
+    return "tone-risk";
+  }
+  if (score >= 70) return "tone-good";
+  if (score >= 45) return "tone-mid";
+  return "tone-risk";
+}
+
+function levelClass(level) {
+  const key = String(level || "").toLowerCase();
+  if (!key) return "level-empty";
+  return `level-${key}`;
+}
+
+function updateAnalyticsButton(analytics, entryCount) {
+  const btn = document.getElementById("analytics-btn");
+  const levelEl = document.getElementById("analytics-pill-level");
+  if (!btn || !levelEl) return;
+
+  btn.classList.remove("level-empty", "level-bronze", "level-silver", "level-gold", "level-diamond");
+
+  if (!entryCount || !analytics) {
+    btn.disabled = true;
+    levelEl.textContent = "--";
+    btn.classList.add("level-empty");
+    btn.title = "Add entries to unlock analytics";
+    return;
+  }
+
+  const level = analytics.gamification?.level || "Bronze";
+  btn.disabled = false;
+  levelEl.textContent = level;
+  btn.classList.add(levelClass(level));
+  btn.title = `Open analytics • ${level} level`;
+}
+
+function renderEntriesList() {
+  const list = document.getElementById("entries-list");
+  if (!list) return;
+
+  if (!entries.length) {
+    list.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">&mdash;</div>
+        <p>No entries yet.<br/>Begin your gratitude journey.</p>
+      </div>`;
+    return;
+  }
+
+  list.innerHTML = entries
+    .map(
+      (e) => `
+    <div class="entry-card" onclick="showDetail('${e.id}')">
+      <div class="entry-day">Day ${e.day}</div>
+      <div class="entry-body">
+        <div class="entry-feeling">${escapeHtml(e.feeling) || "No feeling recorded"}</div>
+        ${
+          e.gratefulFor
+            ? `<div class="entry-grateful-preview">${escapeHtml(
+                truncate(gratefulItemsFromText(e.gratefulFor).join(" • "), 70)
+              )}</div>`
+            : ""
+        }
+      </div>
+      <div class="entry-date">${formatDate(e.date)}</div>
+    </div>`
+    )
+    .join("");
+}
+
+function renderAnalyticsContent(analytics, entryCount) {
+  const content = document.getElementById("analytics-content");
+  if (!content) return;
+
+  if (!entryCount || !analytics) {
+    content.innerHTML = "";
+    return;
+  }
+
+  const scores = analytics.scores || {};
+  const streaks = analytics.streaks || {};
+  const writing = analytics.writing || {};
+  const gamification = analytics.gamification || {};
+  const quests = Array.isArray(analytics.quests) ? analytics.quests : [];
+  const completedQuests = Number(
+    gamification.completedQuests || quests.filter((quest) => quest.done).length,
+  );
+  const totalQuests = Number(gamification.totalQuests || quests.length);
+  const topThemes = Array.isArray(analytics.themes?.top) ? analytics.themes.top : [];
+  const topThemeText = topThemes.length
+    ? topThemes.map((item) => `${item.theme} (${item.count})`).join(" • ")
+    : "No clear theme distribution yet";
+
+  const tooltip = (text) =>
+    ` <span class="score-tip" tabindex="0" role="note" aria-label="${escapeHtml(text)}" data-tip="${escapeHtml(text)}" title="${escapeHtml(text)}">i</span>`;
+
+  content.innerHTML = `
+    <article class="analytics-card">
+      <div class="analytics-head">
+        <div class="analytics-kicker">Analytics</div>
+        <div class="analytics-level">Level ${escapeHtml(gamification.level || "Bronze")} • ${escapeHtml(String(gamification.xp || 0))} XP</div>
+      </div>
+
+      <div class="analytics-grid">
+        <div class="analytics-metric">
+          <div class="analytics-label">Cooperation Score${tooltip("Higher is better. Measures consistency, streak strength, reflection depth, gratitude breadth, and social support mentions.")}</div>
+          <div class="analytics-value ${scoreTone(scores.cooperation)}">${escapeHtml(String(scores.cooperation || 0))}</div>
+        </div>
+        <div class="analytics-metric">
+          <div class="analytics-label">Defection Risk${tooltip("Lower is better. Estimates risk of losing journaling momentum from weak consistency, shallow reflections, or declining trend.")}</div>
+          <div class="analytics-value ${scoreTone(scores.defectionRisk, true)}">${escapeHtml(String(scores.defectionRisk || 0))}</div>
+        </div>
+        <div class="analytics-metric">
+          <div class="analytics-label">Current Streak${tooltip("Consecutive day run. Longer streaks improve cooperation score and reduce defection risk.")}</div>
+          <div class="analytics-value">${escapeHtml(String(streaks.current || 0))} days</div>
+        </div>
+        <div class="analytics-metric">
+          <div class="analytics-label">Reflection Depth${tooltip("Average reflection word count. More detail usually means better self-processing and better long-term outcomes.")}</div>
+          <div class="analytics-value">${escapeHtml(String(writing.reflectionAvgWords || 0))} words</div>
+        </div>
+        <div class="analytics-metric">
+          <div class="analytics-label">Nash Balance${tooltip("Higher is better. Balance of consistency (cooperation), variety (exploration), and low defection risk.")}</div>
+          <div class="analytics-value ${scoreTone(scores.nashBalance)}">${escapeHtml(String(scores.nashBalance || 0))}</div>
+        </div>
+        <div class="analytics-metric">
+          <div class="analytics-label">Exploration${tooltip("Higher is better. Measures how many different life themes appear across your entries.")}</div>
+          <div class="analytics-value ${scoreTone(scores.exploration)}">${escapeHtml(String(scores.exploration || 0))}</div>
+        </div>
+      </div>
+
+      <div class="analytics-focus">
+        <div class="analytics-focus-label">Theme Spread${tooltip("Shows your top recurring focus themes. A broader spread usually increases exploration score.")}</div>
+        <div class="analytics-focus-value">${escapeHtml(topThemeText)}</div>
+      </div>
+
+      <div class="quest-board">
+        <div class="quest-board-head">
+          <div class="quest-board-title">Quest Board</div>
+          <div class="quest-board-progress">${escapeHtml(String(completedQuests))}/${escapeHtml(String(totalQuests))} done</div>
+        </div>
+        <ul class="quest-list">
+          ${quests
+            .map((quest) => {
+              const progress = Number(quest.progress || 0);
+              const target = Number(quest.target || 0);
+              const done = Boolean(quest.done);
+              const progressText = Number.isInteger(progress)
+                ? `${progress}/${target}`
+                : `${progress.toFixed(1)}/${target}`;
+              return `
+                <li class="quest-item ${done ? "quest-item-done" : ""}">
+                  <span class="quest-mark">${done ? "✓" : "○"}</span>
+                  <div class="quest-main">
+                    <div class="quest-title">${escapeHtml(quest.title || "")}</div>
+                    <div class="quest-meta">${escapeHtml(quest.category || "")} • ${escapeHtml(progressText)}</div>
+                  </div>
+                  <span class="quest-xp">+${escapeHtml(String(quest.rewardXp || 0))}xp</span>
+                </li>
+              `;
+            })
+            .join("")}
+        </ul>
+      </div>
+    </article>
+  `;
+}
+
+function showAnalytics() {
+  if (!entries.length || !currentAnalytics) {
+    alert("Add entries to unlock analytics.");
+    return;
+  }
+  renderAnalyticsContent(currentAnalytics, entries.length);
+  showView(analyticsView);
 }
 
 function escapeHtml(str) {
