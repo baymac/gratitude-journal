@@ -1,7 +1,5 @@
-require("dotenv").config();
 const express = require("express");
 const { Client } = require("@notionhq/client");
-const { execSync, spawn } = require("child_process");
 const path = require("path");
 
 const {
@@ -9,13 +7,10 @@ const {
 	InMemoryQuestionStore,
 	PromptPipeline,
 } = require("./lib/reflection-prompt/pipeline");
-const {
-	analyzeJournalGame,
-} = require("./lib/journal-analytics/gameTheory");
+const { analyzeJournalGame } = require("./lib/journal-analytics/gameTheory");
 
-const OLLAMA_MODEL = "gemma3:1b";
-const OLLAMA_BASE_URL = "http://localhost:11434";
-
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "gemma3:1b";
+const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
 
 const app = express();
 app.use(express.json());
@@ -130,7 +125,6 @@ function normalizePromptFields({ reflectionPrompt, reflectionQuestion }) {
 	return { questionToStore, promptToStore };
 }
 
-
 async function getOrCreateDatabase() {
 	if (dataSourceId) return { databaseId, dataSourceId };
 
@@ -225,84 +219,6 @@ async function hydrateQuestionHistory() {
 		console.error("Failed to hydrate prompt history:", err.message);
 	}
 }
-
-// Ollama lifecycle management
-let ollamaProcess = null;
-let weStartedOllama = false;
-
-async function isOllamaRunning() {
-	try {
-		const res = await fetch(`${OLLAMA_BASE_URL}/api/tags`);
-		return res.ok;
-	} catch {
-		return false;
-	}
-}
-
-async function waitForOllama(retries = 20) {
-	for (let i = 0; i < retries; i++) {
-		if (await isOllamaRunning()) return true;
-		await new Promise((resolve) => setTimeout(resolve, 500));
-	}
-	return false;
-}
-
-async function ensureOllama() {
-	if (await isOllamaRunning()) {
-		console.log("Ollama already running.");
-	} else {
-		console.log("Starting Ollama...");
-		ollamaProcess = spawn("ollama", ["serve"], {
-			stdio: "ignore",
-			detached: false,
-		});
-		ollamaProcess.on("error", (err) => {
-			console.error("Failed to start Ollama:", err.message);
-			console.error("Install Ollama from https://ollama.com");
-		});
-		weStartedOllama = true;
-		if (!(await waitForOllama())) {
-			console.error(
-				"Ollama did not start in time. Prompts will use fallbacks.",
-			);
-			return;
-		}
-		console.log("Ollama started.");
-	}
-
-	try {
-		const res = await fetch(`${OLLAMA_BASE_URL}/api/tags`);
-		const data = await res.json();
-		const hasModel = data.models?.some((m) =>
-			m.name.startsWith(OLLAMA_MODEL.split(":")[0]),
-		);
-		if (!hasModel) {
-			console.log(`Pulling ${OLLAMA_MODEL} (first run only)...`);
-			execSync(`ollama pull ${OLLAMA_MODEL}`, { stdio: "inherit" });
-			console.log(`${OLLAMA_MODEL} ready.`);
-		}
-	} catch (err) {
-		console.error("Could not verify/pull model:", err.message);
-	}
-}
-
-function stopOllama() {
-	if (weStartedOllama && ollamaProcess) {
-		console.log("Stopping Ollama...");
-		ollamaProcess.kill();
-		ollamaProcess = null;
-	}
-}
-
-process.on("SIGINT", () => {
-	stopOllama();
-	process.exit(0);
-});
-
-process.on("SIGTERM", () => {
-	stopOllama();
-	process.exit(0);
-});
 
 async function generateQuestionFromOllama({ theme, openingWord }) {
 	const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
@@ -498,8 +414,13 @@ app.get("/api/open-claw/prompt", async (req, res) => {
 // Returns { day, date, entryId }
 app.post("/api/open-claw/log-gratitude", async (req, res) => {
 	try {
-		const { feeling, reflection, reflectionQuestion, reflectionPrompt, gratefulFor } =
-			req.body;
+		const {
+			feeling,
+			reflection,
+			reflectionQuestion,
+			reflectionPrompt,
+			gratefulFor,
+		} = req.body;
 		const created = await createEntry({
 			feeling,
 			reflection,
@@ -657,10 +578,8 @@ app.delete("/api/entries/:id", async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
-ensureOllama()
-	.then(() => hydrateQuestionHistory())
-	.finally(() => {
-		app.listen(PORT, () => {
-			console.log(`Gratitude journal running at http://localhost:${PORT}`);
-		});
+hydrateQuestionHistory().then(() => {
+	app.listen(PORT, () => {
+		console.log(`Gratitude journal running at http://localhost:${PORT}`);
 	});
+});

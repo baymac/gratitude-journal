@@ -12,7 +12,6 @@
   "description": "",
   "dependencies": {
     "@notionhq/client": "^5.9.0",
-    "dotenv": "^17.3.1",
     "express": "^5.2.1"
   }
 }

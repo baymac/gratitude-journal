@@ -1,0 +1,61 @@
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: docker/gratitude.Dockerfile
+    working_dir: /app
+    command: [ "node", "--watch", "apps/gratitude/server.js" ]
+    ports:
+      - "${PORT:-3000}:3000"
+    env_file:
+      - ./envs/.env.gratitude
+      - ./envs/.env.ollama
+    volumes:
+      - ..:/app
+      - /app/node_modules
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: nginx.Dockerfile
+    ports:
+      - "80:80"
+    depends_on:
+      - app
+
+  ollama:
+    image: ollama/ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - gratitude_ollama_data:/root/.ollama
+    healthcheck:
+      test: [ "CMD", "ollama", "list" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  ollama-pull:
+    image: curlimages/curl:latest
+    depends_on:
+      ollama:
+        condition: service_healthy
+    env_file:
+      - ./envs/.env.ollama
+    entrypoint:
+      - sh
+      - -c
+      - 'curl -sf -X POST http://ollama:11434/api/pull -d "{\"name\":\"$$OLLAMA_MODEL\"}"'
+    restart: "no"
+
+volumes:
+  gratitude_ollama_data:
+
+
+networks:
+  default:
+    name: gratitude-dev-network

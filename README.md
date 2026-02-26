@@ -96,15 +96,29 @@ Gratitude server (http://localhost:3000)
 | `/log_gratitude` | Guided multi-turn journaling flow for today |
 | `/analytics_gratitude` | Snapshot of your journaling stats |
 
+## Docker
+
+| | Guide |
+|-|-------|
+| Development | [`docker/README.md`](docker/README.md) — full stack locally with hot reload |
+| Production | [`docker-deploy/README.md`](docker-deploy/README.md) — VPS deploy with nginx + SSL |
+
+**Dev quick-start:**
+```bash
+cp docker/envs/.env.example docker/envs/.env  # fill in values
+docker compose -f docker/docker-compose.yml up --build
+# open http://localhost
+```
+
 ## Screenshots
 
 ### Home (Entries List)
 
-![Home screen](docs/screenshots/app-home.png)
+![Home screen](apps/gratitude/docs/screenshots/app-home.png)
 
 ### Add New Entry
 
-![Add new entry screen](docs/screenshots/app-new-entry.png)
+![Add new entry screen](apps/gratitude/docs/screenshots/app-new-entry.png)
 
 ## Tech Stack
 
