@@ -1,0 +1,35 @@
+// Add this fragment to your ~/.openclaw/openclaw.json
+// It registers the two Telegram commands and tells the agent workspace
+// where to find the SOUL.md that describes the gratitude API.
+//
+// Adjust agentId, workspace path, and the Telegram channel block to match
+// your actual openclaw.json setup.
+
+{
+  agents: {
+    list: [
+      {
+        id: "gratitude",
+        workspace: "/path/to/this/repo/openclaw",  // folder containing SOUL.md
+        // model: omitted — inherits whatever model you configured during openclaw onboard
+        tools: {
+          profile: "minimal",
+          allow: ["web_fetch"],  // needed to call localhost:3000
+        },
+      },
+    ],
+  },
+
+  channels: {
+    telegram: {
+      // Route all messages to the gratitude agent (or use bindings for per-command routing)
+      defaultAgentId: "gratitude",
+
+      // Register the commands in the Telegram menu
+      customCommands: [
+        { command: "log_gratitude", description: "Log today's gratitude entry" },
+        { command: "analytics_gratitude", description: "View your journaling stats" },
+      ],
+    },
+  },
+}

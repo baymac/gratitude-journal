@@ -16,8 +16,10 @@ const {
 const OLLAMA_MODEL = "gemma3:1b";
 const OLLAMA_BASE_URL = "http://localhost:11434";
 
+
 const app = express();
 app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
 app.use(express.static(path.join(__dirname, "public")));
 
 const notion = new Client({ auth: process.env.NOTION_API_KEY });
@@ -43,6 +45,16 @@ const promptPipeline = new PromptPipeline(promptPipelineConfig, questionStore);
 
 let databaseId = null;
 let dataSourceId = null;
+const FALLBACK_REFLECTION_QUESTION =
+	"What memory still guides the person you are becoming?";
+const FALLBACK_REFLECTION_PROMPT = "Theme: personal growth | Start with: What";
+
+class HttpError extends Error {
+	constructor(status, message) {
+		super(message);
+		this.status = status;
+	}
+}
 
 function richText(content) {
 	return {
@@ -104,6 +116,20 @@ function rememberQuestionIfNeeded(question, prompt, createdAt = null) {
 		createdAt: createdAt || new Date().toISOString(),
 	});
 }
+
+function todayDateStr() {
+	return new Date().toISOString().split("T")[0];
+}
+
+function normalizePromptFields({ reflectionPrompt, reflectionQuestion }) {
+	const rawPrompt = String(reflectionPrompt || "").trim();
+	const questionToStore =
+		String(reflectionQuestion || "").trim() ||
+		(!looksLikePromptMeta(rawPrompt) ? rawPrompt : "");
+	const promptToStore = looksLikePromptMeta(rawPrompt) ? rawPrompt : "";
+	return { questionToStore, promptToStore };
+}
+
 
 async function getOrCreateDatabase() {
 	if (dataSourceId) return { databaseId, dataSourceId };
@@ -319,15 +345,14 @@ Rules:
 	return data.message?.content?.trim() || "";
 }
 
-// Generate a reflection question using anti-repetition pipeline
-app.get("/api/prompt", async (req, res) => {
+async function generatePromptPayload() {
 	try {
 		const result = await promptPipeline.generate({
 			generateCandidate: ({ theme, openingWord }) =>
 				generateQuestionFromOllama({ theme, openingWord }),
 		});
 
-		res.json({
+		return {
 			prompt: result.question,
 			question: result.question,
 			reflectionQuestion: result.question,
@@ -336,30 +361,177 @@ app.get("/api/prompt", async (req, res) => {
 			openingWord: result.openingWord,
 			attempts: result.attempts,
 			fromFallback: result.fromFallback,
-		});
+		};
 	} catch (err) {
 		console.error("Prompt generation failed:", err.message);
-		res.json({
-			prompt: "What memory still guides the person you are becoming?",
-			question: "What memory still guides the person you are becoming?",
-			reflectionQuestion:
-				"What memory still guides the person you are becoming?",
-			reflectionPrompt: "Theme: personal growth | Start with: What",
+		return {
+			prompt: FALLBACK_REFLECTION_QUESTION,
+			question: FALLBACK_REFLECTION_QUESTION,
+			reflectionQuestion: FALLBACK_REFLECTION_QUESTION,
+			reflectionPrompt: FALLBACK_REFLECTION_PROMPT,
 			fromFallback: true,
+		};
+	}
+}
+
+async function listEntries(direction = "descending") {
+	const { dataSourceId: dsId } = await getOrCreateDatabase();
+	const response = await notion.dataSources.query({
+		data_source_id: dsId,
+		sorts: [{ property: "Date", direction }],
+	});
+	return response.results.map((page) => mapNotionPageToEntry(page));
+}
+
+async function analyticsSnapshot() {
+	const entries = await listEntries("ascending");
+	const analytics = analyzeJournalGame(entries);
+	return { entries, analytics };
+}
+
+async function createEntry({
+	feeling,
+	reflection,
+	reflectionPrompt,
+	reflectionQuestion,
+	gratefulFor,
+}) {
+	const { dataSourceId: dsId } = await getOrCreateDatabase();
+	const date = todayDateStr();
+
+	const todayExisting = await notion.dataSources.query({
+		data_source_id: dsId,
+		filter: {
+			property: "Date",
+			date: { equals: date },
+		},
+		page_size: 1,
+	});
+
+	if (todayExisting.results.length > 0) {
+		throw new HttpError(409, "Today's journal is done.");
+	}
+
+	const existing = await notion.dataSources.query({ data_source_id: dsId });
+	const day = String(existing.results.length + 1);
+	const { questionToStore, promptToStore } = normalizePromptFields({
+		reflectionPrompt,
+		reflectionQuestion,
+	});
+
+	const page = await notion.pages.create({
+		parent: { data_source_id: dsId },
+		properties: {
+			Day: { title: [{ text: { content: day } }] },
+			Date: { date: { start: date } },
+			Feeling: richText(feeling),
+			Reflection: richText(reflection),
+			ReflectionPrompt: richText(promptToStore),
+			ReflectionQuestion: richText(questionToStore),
+			GratefulFor: richText(gratefulFor),
+		},
+	});
+
+	rememberQuestionIfNeeded(questionToStore, promptToStore, page.created_time);
+	return {
+		id: page.id,
+		day,
+		date,
+	};
+}
+
+function analyticsSummaryText(entries, analytics) {
+	if (!entries.length) {
+		return "No entries yet. Run log-today to create your first journal entry.";
+	}
+
+	const gamification = analytics.gamification || {};
+	const scores = analytics.scores || {};
+	const streaks = analytics.streaks || {};
+	const topThemes = Array.isArray(analytics.themes?.top)
+		? analytics.themes.top.slice(0, 3)
+		: [];
+	const themeText = topThemes.length
+		? topThemes.map((item) => `${item.theme} (${item.count})`).join(", ")
+		: "No clear pattern yet";
+
+	return [
+		`Entries: ${entries.length}`,
+		`Level: ${gamification.level || "Bronze"} (${gamification.xp || 0} XP)`,
+		`Current streak: ${streaks.current || 0} day(s)`,
+		`Cooperation score: ${scores.cooperation || 0}`,
+		`Defection risk: ${scores.defectionRisk || 0}`,
+		`Top themes: ${themeText}`,
+	].join("\n");
+}
+
+// Generate a reflection question using anti-repetition pipeline
+app.get("/api/prompt", async (req, res) => {
+	const payload = await generatePromptPayload();
+	res.json(payload);
+});
+
+// ── Open Claw endpoints ──────────────────────────────────────────────────────
+// These are called by the Open Claw AI agent when handling /log-gratitude
+// and /analytics-gratitude Telegram commands. The agent manages conversation
+// state; these endpoints are fully stateless.
+
+// Step 1 of /log-gratitude: get today's reflection prompt.
+// Returns { reflectionQuestion, reflectionPrompt, alreadyLogged }
+app.get("/api/open-claw/prompt", async (req, res) => {
+	try {
+		const entries = await listEntries("descending");
+		const alreadyLogged = entries.some((e) => e.date === todayDateStr());
+		if (alreadyLogged) {
+			return res.json({ alreadyLogged: true });
+		}
+		const payload = await generatePromptPayload();
+		res.json({ alreadyLogged: false, ...payload });
+	} catch (err) {
+		console.error(err);
+		res.status(500).json({ error: err.message });
+	}
+});
+
+// Step 2 of /log-gratitude: save the entry once the agent has collected all fields.
+// Body: { feeling, reflection, reflectionQuestion, reflectionPrompt, gratefulFor }
+// Returns { day, date, entryId }
+app.post("/api/open-claw/log-gratitude", async (req, res) => {
+	try {
+		const { feeling, reflection, reflectionQuestion, reflectionPrompt, gratefulFor } =
+			req.body;
+		const created = await createEntry({
+			feeling,
+			reflection,
+			reflectionQuestion,
+			reflectionPrompt,
+			gratefulFor,
 		});
+		res.json({ day: created.day, date: created.date, entryId: created.id });
+	} catch (err) {
+		if (err instanceof HttpError) {
+			return res.status(err.status).json({ error: err.message });
+		}
+		console.error(err);
+		res.status(500).json({ error: err.message });
+	}
+});
+
+// /analytics-gratitude: plain-text summary the agent can paste directly into Telegram.
+app.get("/api/open-claw/analytics", async (req, res) => {
+	try {
+		const { entries, analytics } = await analyticsSnapshot();
+		res.type("text/plain").send(analyticsSummaryText(entries, analytics));
+	} catch (err) {
+		console.error(err);
+		res.status(500).json({ error: err.message });
 	}
 });
 
 // Get all entries
 app.get("/api/entries", async (req, res) => {
 	try {
-		const { dataSourceId: dsId } = await getOrCreateDatabase();
-		const response = await notion.dataSources.query({
-			data_source_id: dsId,
-			sorts: [{ property: "Date", direction: "descending" }],
-		});
-
-		const entries = response.results.map((page) => mapNotionPageToEntry(page));
+		const entries = await listEntries("descending");
 		res.json(entries);
 	} catch (err) {
 		console.error(err);
@@ -370,14 +542,7 @@ app.get("/api/entries", async (req, res) => {
 // Strategy-based journaling analytics
 app.get("/api/analytics", async (req, res) => {
 	try {
-		const { dataSourceId: dsId } = await getOrCreateDatabase();
-		const response = await notion.dataSources.query({
-			data_source_id: dsId,
-			sorts: [{ property: "Date", direction: "ascending" }],
-		});
-
-		const entries = response.results.map((page) => mapNotionPageToEntry(page));
-		const analytics = analyzeJournalGame(entries);
+		const { analytics } = await analyticsSnapshot();
 		res.json(analytics);
 	} catch (err) {
 		console.error("Analytics generation failed:", err.message);
@@ -406,47 +571,18 @@ app.post("/api/entries", async (req, res) => {
 			reflectionQuestion,
 			gratefulFor,
 		} = req.body;
-		const { dataSourceId: dsId } = await getOrCreateDatabase();
-		const date = new Date().toISOString().split("T")[0];
-
-		const todayExisting = await notion.dataSources.query({
-			data_source_id: dsId,
-			filter: {
-				property: "Date",
-				date: { equals: date },
-			},
-			page_size: 1,
+		const created = await createEntry({
+			feeling,
+			reflection,
+			reflectionPrompt,
+			reflectionQuestion,
+			gratefulFor,
 		});
-
-		if (todayExisting.results.length > 0) {
-			return res.status(409).json({ error: "Today's journal is done." });
-		}
-
-		const existing = await notion.dataSources.query({ data_source_id: dsId });
-		const day = String(existing.results.length + 1);
-
-		const rawPrompt = String(reflectionPrompt || "").trim();
-		const questionToStore =
-			String(reflectionQuestion || "").trim() ||
-			(!looksLikePromptMeta(rawPrompt) ? rawPrompt : "");
-		const promptToStore = looksLikePromptMeta(rawPrompt) ? rawPrompt : "";
-
-		const page = await notion.pages.create({
-			parent: { data_source_id: dsId },
-			properties: {
-				Day: { title: [{ text: { content: day } }] },
-				Date: { date: { start: date } },
-				Feeling: richText(feeling),
-				Reflection: richText(reflection),
-				ReflectionPrompt: richText(promptToStore),
-				ReflectionQuestion: richText(questionToStore),
-				GratefulFor: richText(gratefulFor),
-			},
-		});
-
-		rememberQuestionIfNeeded(questionToStore, promptToStore, page.created_time);
-		res.json({ id: page.id });
+		res.json({ id: created.id });
 	} catch (err) {
+		if (err instanceof HttpError) {
+			return res.status(err.status).json({ error: err.message });
+		}
 		console.error(err);
 		res.status(500).json({ error: err.message });
 	}
@@ -457,7 +593,7 @@ app.put("/api/entries/:id", async (req, res) => {
 	try {
 		const page = await notion.pages.retrieve({ page_id: req.params.id });
 		const entryDate = page.properties?.Date?.date?.start || "";
-		const todayDate = new Date().toISOString().split("T")[0];
+		const todayDate = todayDateStr();
 		if (entryDate !== todayDate) {
 			return res
 				.status(403)
@@ -472,11 +608,10 @@ app.put("/api/entries/:id", async (req, res) => {
 			gratefulFor,
 		} = req.body;
 
-		const rawPrompt = String(reflectionPrompt || "").trim();
-		const questionToStore =
-			String(reflectionQuestion || "").trim() ||
-			(!looksLikePromptMeta(rawPrompt) ? rawPrompt : "");
-		const promptToStore = looksLikePromptMeta(rawPrompt) ? rawPrompt : "";
+		const { questionToStore, promptToStore } = normalizePromptFields({
+			reflectionPrompt,
+			reflectionQuestion,
+		});
 
 		await notion.pages.update({
 			page_id: req.params.id,
@@ -502,7 +637,7 @@ app.delete("/api/entries/:id", async (req, res) => {
 	try {
 		const page = await notion.pages.retrieve({ page_id: req.params.id });
 		const entryDate = page.properties?.Date?.date?.start || "";
-		const todayDate = new Date().toISOString().split("T")[0];
+		const todayDate = todayDateStr();
 		if (entryDate !== todayDate) {
 			return res
 				.status(403)

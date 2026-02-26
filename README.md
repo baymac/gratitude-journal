@@ -59,6 +59,43 @@ Open [http://localhost:3000](http://localhost:3000)
 
 The app automatically creates a "Gratitude Entries" database inside your Notion page on first use.
 
+## Open Claw Integration
+
+[Open Claw](https://openclaw.ai) runs on the same VPS as this server and acts as the Telegram gateway. Its AI agent handles the multi-turn conversation with the user; this server just exposes stateless REST endpoints the agent calls.
+
+### How it works
+
+```
+Telegram user
+    ↓  /log_gratitude or /analytics_gratitude
+Open Claw (Telegram gateway)
+    ↓  routes to the configured agent
+Open Claw AI agent  ←  reads openclaw/SOUL.md
+    ↓  conducts conversation, then calls:
+Gratitude server (http://localhost:3000)
+```
+
+### Agent setup
+
+1. Copy `openclaw/SOUL.md` into your Open Claw agent's workspace directory.
+2. Merge the settings in `openclaw/openclaw-config-fragment.json5` into `~/.openclaw/openclaw.json` — it registers the Telegram commands and points the agent at the workspace.
+3. Restart Open Claw.
+
+### API endpoints used by the agent
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/api/open-claw/prompt` | Get today's reflection question. Returns `{ alreadyLogged, reflectionQuestion, reflectionPrompt }` |
+| `POST` | `/api/open-claw/log-gratitude` | Save a completed entry. Body: `{ feeling, reflection, reflectionQuestion, reflectionPrompt, gratefulFor }` |
+| `GET` | `/api/open-claw/analytics` | Plain-text analytics summary, ready to paste into Telegram |
+
+### Telegram commands
+
+| Command | Description |
+|---------|-------------|
+| `/log_gratitude` | Guided multi-turn journaling flow for today |
+| `/analytics_gratitude` | Snapshot of your journaling stats |
+
 ## Screenshots
 
 ### Home (Entries List)
