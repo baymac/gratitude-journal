@@ -1,6 +1,7 @@
 const express = require("express");
 const { Client } = require("@notionhq/client");
 const path = require("path");
+const fs = require("fs");
 
 const {
 	DEFAULT_PROMPT_PIPELINE_CONFIG,
@@ -38,8 +39,28 @@ const questionStore = new InMemoryQuestionStore(
 );
 const promptPipeline = new PromptPipeline(promptPipelineConfig, questionStore);
 
-let databaseId = null;
-let dataSourceId = null;
+const NOTION_CACHE_PATH = path.join(__dirname, ".notion-cache.json");
+
+function loadNotionCache() {
+	try {
+		const raw = fs.readFileSync(NOTION_CACHE_PATH, "utf8");
+		return JSON.parse(raw);
+	} catch {
+		return null;
+	}
+}
+
+function saveNotionCache(data) {
+	try {
+		fs.writeFileSync(NOTION_CACHE_PATH, JSON.stringify(data), "utf8");
+	} catch (err) {
+		console.warn("Could not write Notion cache:", err.message);
+	}
+}
+
+const cachedIds = loadNotionCache();
+let databaseId = cachedIds?.databaseId || null;
+let dataSourceId = cachedIds?.dataSourceId || null;
 const FALLBACK_REFLECTION_QUESTION =
 	"What memory still guides the person you are becoming?";
 const FALLBACK_REFLECTION_PROMPT = "Theme: personal growth | Start with: What";
@@ -186,6 +207,7 @@ async function getOrCreateDatabase() {
 		});
 	}
 
+	saveNotionCache({ databaseId, dataSourceId });
 	return { databaseId, dataSourceId };
 }
 
@@ -578,8 +600,7 @@ app.delete("/api/entries/:id", async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
-hydrateQuestionHistory().then(() => {
-	app.listen(PORT, () => {
-		console.log(`Gratitude journal running at http://localhost:${PORT}`);
-	});
+app.listen(PORT, () => {
+	console.log(`Gratitude journal running at http://localhost:${PORT}`);
+	hydrateQuestionHistory();
 });

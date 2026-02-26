@@ -270,7 +270,9 @@ async function fetchReflectionPrompt() {
 // Load entries
 async function loadEntries() {
   const list = document.getElementById("entries-list");
+  const addBtn = document.getElementById("add-btn");
   list.innerHTML = '<div class="loading">Loading<span class="loading-dots"></span></div>';
+  if (addBtn) addBtn.disabled = true;
 
   const cachedEntries = readStoredJson(STORAGE_KEYS.entries, []);
   const cachedAnalyticsRaw = readStoredJson(STORAGE_KEYS.analytics, null);
@@ -278,6 +280,7 @@ async function loadEntries() {
   if (Array.isArray(cachedEntries) && cachedEntries.length) {
     entries = cachedEntries;
     renderEntriesList();
+    if (addBtn) addBtn.disabled = false;
   }
   currentAnalytics = cachedAnalytics;
   updateAnalyticsButton(cachedAnalytics, entries.length);
@@ -304,12 +307,14 @@ async function loadEntries() {
     }
 
     renderEntriesList();
+    if (addBtn) addBtn.disabled = false;
   } catch (err) {
     if (!entries.length) {
       currentAnalytics = null;
       updateAnalyticsButton(null, 0);
       list.innerHTML = `<div class="empty-state"><p>Could not load entries.</p><p>${escapeHtml(err.message)}</p></div>`;
     }
+    if (addBtn) addBtn.disabled = false;
   }
 }
 

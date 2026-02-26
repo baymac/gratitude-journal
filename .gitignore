@@ -1,5 +1,6 @@
 node_modules
 .DS_Store
+**/.notion-cache.json
 docker-deploy/
 
 # Ignore all env files but allow examples
