@@ -5,24 +5,35 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OPENCLAW_CONFIG="$HOME/.openclaw/openclaw.json"
 
-# Poor-man's JSON5 merge via node (no jq needed, handles comments/trailing commas)
-node - "$OPENCLAW_CONFIG" "$SCRIPT_DIR/openclaw-config-fragment.json5" "$SCRIPT_DIR" <<'JS'
+node --input-type=module <<JS
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { dirname } from "path";
+
+const configPath = "$OPENCLAW_CONFIG";
+const fragmentPath = "$SCRIPT_DIR/openclaw-config-fragment.json5";
+const workspace  = "$SCRIPT_DIR";
 
 function parseJson5(src) {
   return JSON.parse(
     src
       .replace(/\/\/[^\n]*/g, "")
       .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/,(\s*[}\]])/g, "$1")
-      .replace(/([{,]\s*)([a-zA-Z_$][a-zA-Z0-9_$]*)(\s*:)/g, '$1"$2"$3')
+      .replace(/,(\s*[}\]])/g, "\$1")
+      .replace(/([{,]\s*)([a-zA-Z_\$][a-zA-Z0-9_\$]*)(\s*:)/g, '\$1"\$2"\$3')
   );
 }
 
 function deepMerge(target, source) {
   for (const key of Object.keys(source)) {
-    if (Array.isArray(source[key])) {
+    if (key === "list" && Array.isArray(source[key])) {
+      // Upsert by id instead of replacing the whole array
+      target[key] = target[key] ?? [];
+      for (const item of source[key]) {
+        const idx = target[key].findIndex(x => x.id === item.id);
+        if (idx >= 0) Object.assign(target[key][idx], item);
+        else target[key].push(item);
+      }
+    } else if (Array.isArray(source[key])) {
       target[key] = source[key];
     } else if (source[key] && typeof source[key] === "object") {
       target[key] = target[key] ?? {};
@@ -33,8 +44,6 @@ function deepMerge(target, source) {
   }
   return target;
 }
-
-const [configPath, fragmentPath, workspace] = process.argv.slice(2);
 
 const existing = existsSync(configPath)
   ? parseJson5(readFileSync(configPath, "utf8"))
