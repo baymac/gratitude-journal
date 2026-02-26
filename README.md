@@ -1,127 +1,50 @@
-# Gratitude Journal
+# Open Claw Apps
 
-A minimal dark-themed gratitude journal app that stores entries in Notion.
+A monorepo of mental health and wellbeing tracking apps powered by [Open Claw](https://openclaw.ai) — a Telegram-native AI journaling platform.
 
-Each entry captures:
-- **Day number & date**
-- **How you're feeling**
-- **An AI-generated reflection question**
-- **What you're grateful for**
+Each app exposes a small REST API that Open Claw's AI agents call during guided Telegram conversations. Apps store data in Notion and run locally or on a VPS behind nginx.
 
-## Setup
+## Apps
 
-### 1. Create a Notion Integration
+| App | Description |
+|-----|-------------|
+| [`apps/gratitude`](apps/gratitude/README.md) | Daily gratitude journal — captures mood, reflection, and gratitude entries |
 
-1. Go to [notion.so/my-integrations](https://www.notion.so/my-integrations)
-2. Click **New integration**
-3. Name it (e.g. "Gratitude Journal"), select your workspace
-4. Copy the **Internal Integration Secret** (`secret_...`)
+## Project Structure
 
-### 2. Connect Integration to Your Page
+```
+apps/
+  gratitude/          # Gratitude journal app
+    public/           # Static frontend (HTML, CSS, JS)
+    lib/
+      reflection-prompt/   # AI reflection question pipeline
+      journal-analytics/   # Streak and quest tracking
+    openclaw/         # Open Claw agent config and SOUL.md
+    server.js         # Express server + Notion API routes
+    package.json
 
-1. Open your **Gratitude Journal** page in Notion
-2. Click the `...` menu (top right) → **Connections** → Add your integration
-3. Copy the **Page ID** from the URL — it's the 32-character hex string after the page name:
-   ```
-   https://notion.so/Gratitude-Journal-abc123def456...
-                                        ^^^^^^^^^^^^^^^^ this part
-   ```
+docker/               # Local development stack
+  docker-compose.yml  # App + Ollama + nginx
+  gratitude.Dockerfile
+  nginx/
+  envs/               # .env.*.example files (copy and fill in)
+```
 
-### 3. Configure Environment
+## Docker Dev Setup
 
 ```bash
-cp .env.example .env
-```
-
-Fill in your values:
-```
-NOTION_API_KEY=secret_your_key_here
-NOTION_PAGE_ID=your_page_id_here
-PORT=3000
-```
-
-### 4. Install & Run
-
-```bash
-npm install
-npm start
-```
-
-Open [http://localhost:3000](http://localhost:3000)
-
-## Usage
-
-- **Home** — Lists all entries sorted by date
-- **Analytics** — Scores consistency and tracks a 66-quest board with completion checkmarks
-- **+ button** — Create a new entry
-- **Click an entry** — View full details
-- **Edit / Delete** — Available on each entry's detail view
-
-The app automatically creates a "Gratitude Entries" database inside your Notion page on first use.
-
-## Open Claw Integration
-
-[Open Claw](https://openclaw.ai) runs on the same VPS as this server and acts as the Telegram gateway. Its AI agent handles the multi-turn conversation with the user; this server just exposes stateless REST endpoints the agent calls.
-
-### How it works
-
-```
-Telegram user
-    ↓  /log_gratitude or /analytics_gratitude
-Open Claw (Telegram gateway)
-    ↓  routes to the configured agent
-Open Claw AI agent  ←  reads openclaw/SOUL.md
-    ↓  conducts conversation, then calls:
-Gratitude server (http://localhost:3000)
-```
-
-### Agent setup
-
-1. Copy `openclaw/SOUL.md` into your Open Claw agent's workspace directory.
-2. Merge the settings in `openclaw/openclaw-config-fragment.json5` into `~/.openclaw/openclaw.json` — it registers the Telegram commands and points the agent at the workspace.
-3. Restart Open Claw.
-
-### API endpoints used by the agent
-
-| Method | Path | Purpose |
-|--------|------|---------|
-| `GET` | `/api/open-claw/prompt` | Get today's reflection question. Returns `{ alreadyLogged, reflectionQuestion, reflectionPrompt }` |
-| `POST` | `/api/open-claw/log-gratitude` | Save a completed entry. Body: `{ feeling, reflection, reflectionQuestion, reflectionPrompt, gratefulFor }` |
-| `GET` | `/api/open-claw/analytics` | Plain-text analytics summary, ready to paste into Telegram |
-
-### Telegram commands
-
-| Command | Description |
-|---------|-------------|
-| `/log_gratitude` | Guided multi-turn journaling flow for today |
-| `/analytics_gratitude` | Snapshot of your journaling stats |
-
-## Docker
-
-| | Guide |
-|-|-------|
-| Development | [`docker/README.md`](docker/README.md) — full stack locally with hot reload |
-| Production | [`docker-deploy/README.md`](docker-deploy/README.md) — VPS deploy with nginx + SSL |
-
-**Dev quick-start:**
-```bash
-cp docker/envs/.env.example docker/envs/.env  # fill in values
+cp docker/envs/.env.gratitude.example docker/envs/.env.gratitude
+cp docker/envs/.env.ollama.example docker/envs/.env.ollama
+# fill in values, then:
 docker compose -f docker/docker-compose.yml up --build
-# open http://localhost
 ```
 
-## Screenshots
+See [`docker/README.md`](docker/README.md) for full setup details.
 
-### Home (Entries List)
+## Open Claw
 
-![Home screen](apps/gratitude/docs/screenshots/app-home.png)
+Each app's `openclaw/` directory contains:
+- `SOUL.md` — the agent's personality and instructions
+- `openclaw-config-fragment.json5` — Telegram command registrations to merge into `~/.openclaw/openclaw.json`
 
-### Add New Entry
-
-![Add new entry screen](apps/gratitude/docs/screenshots/app-new-entry.png)
-
-## Tech Stack
-
-- **Frontend:** HTML, CSS, vanilla JS
-- **Backend:** Node.js, Express
-- **Storage:** Notion API (`@notionhq/client`)
+See individual app READMEs for agent setup steps.
