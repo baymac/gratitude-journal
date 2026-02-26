@@ -16,6 +16,7 @@ function parseJson5(src) {
       .replace(/\/\/[^\n]*/g, "")
       .replace(/\/\*[\s\S]*?\*\//g, "")
       .replace(/,(\s*[}\]])/g, "$1")
+      .replace(/([{,]\s*)([a-zA-Z_$][a-zA-Z0-9_$]*)(\s*:)/g, '$1"$2"$3')
   );
 }
 
