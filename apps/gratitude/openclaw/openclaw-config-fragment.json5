@@ -9,10 +9,10 @@
     list: [
       {
         id: "gratitude",
-        workspace: "/path/to/this/repo/openclaw",  // folder containing SOUL.md
-        // model: omitted — inherits whatever model you configured during openclaw onboard
+        workspace: "~/.openclaw/workspace-gratitude",  // populated by install-openclaw.sh
+        model: "openrouter/anthropic/claude-3.5-haiku",
         tools: {
-          profile: "none",
+          profile: "minimal",
           allow: ["web_fetch"],  // needed to call localhost:3000
         },
       },

@@ -87,6 +87,8 @@ Gratitude server (http://localhost:3000)
 2. Merge the settings in `openclaw/openclaw-config-fragment.json5` into `~/.openclaw/openclaw.json` — it registers the Telegram commands and points the agent at the workspace.
 3. Restart Open Claw.
 
+or use `openclaw/install-openclaw.sh`.
+
 ### API endpoints used by the agent
 
 | Method | Path | Purpose |

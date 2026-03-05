@@ -13,7 +13,7 @@ Runs the full stack locally: app + nginx + Ollama.
 cp docker/envs/.env.example docker/envs/.env
 
 # 2. Start
-docker compose -f docker/docker-compose.yml up --build
+docker compose -f docker/docker-compose.yml up --build -d
 
 # 3. Open http://localhost
 ```

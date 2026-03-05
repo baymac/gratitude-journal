@@ -36,7 +36,7 @@ docker/               # Local development stack
 cp docker/envs/.env.gratitude.example docker/envs/.env.gratitude
 cp docker/envs/.env.ollama.example docker/envs/.env.ollama
 # fill in values, then:
-docker compose -f docker/docker-compose.yml up --build
+docker compose -f docker/docker-compose.yml up --build -d
 ```
 
 See [`docker/README.md`](docker/README.md) for full setup details.

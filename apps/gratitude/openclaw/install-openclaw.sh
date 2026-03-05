@@ -4,6 +4,12 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OPENCLAW_CONFIG="$HOME/.openclaw/openclaw.json"
+AGENT_WORKSPACE="$HOME/.openclaw/workspace-gratitude"
+
+# Copy SOUL.md into the dedicated agent workspace
+mkdir -p "$AGENT_WORKSPACE"
+cp "$SCRIPT_DIR/SOUL.md" "$AGENT_WORKSPACE/SOUL.md"
+echo "✓ SOUL.md deployed to $AGENT_WORKSPACE"
 
 node --input-type=module <<JS
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
@@ -11,7 +17,7 @@ import { dirname } from "path";
 
 const configPath = "$OPENCLAW_CONFIG";
 const fragmentPath = "$SCRIPT_DIR/openclaw-config-fragment.json5";
-const workspace  = "$SCRIPT_DIR";
+const workspace  = "$AGENT_WORKSPACE";
 
 function parseJson5(src) {
   return JSON.parse(
