@@ -13,24 +13,29 @@
         model: "openrouter/anthropic/claude-3.5-haiku",
         tools: {
           profile: "minimal",
-          allow: ["web_fetch"],  // needed to call localhost:3000
+          allow: ["web_fetch", "exec"],  // web_fetch for log flow, exec for skill bash bypass
         },
       },
     ],
   },
 
-  // Route all Telegram messages to the gratitude agent
+  // Route only logging-bot messages to the gratitude agent
   bindings: [
-    { agentId: "gratitude", match: { channel: "telegram" } },
+    { agentId: "gratitude", match: { channel: "telegram", accountId: "logging-bot" } },
   ],
 
   channels: {
     telegram: {
-      // Register the commands in the Telegram menu
-      customCommands: [
-        { command: "log_gratitude", description: "Log today's gratitude entry" },
-        { command: "analytics_gratitude", description: "View your journaling stats" },
-      ],
+      accounts: {
+        "logging-bot": {
+          botToken: "",  // set TELEGRAM_BOT_TOKEN_LOGGING_BOT or fill in here
+          // Register the commands in the Telegram menu
+          customCommands: [
+            { command: "log_gratitude", description: "Log today's gratitude entry" },
+            { command: "analytics_gratitude", description: "View your journaling stats" },
+          ],
+        },
+      },
     },
   },
 }

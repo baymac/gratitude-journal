@@ -5,11 +5,23 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OPENCLAW_CONFIG="$HOME/.openclaw/openclaw.json"
 AGENT_WORKSPACE="$HOME/.openclaw/workspace-gratitude"
+BOT_TOKEN="${TELEGRAM_BOT_TOKEN_LOGGING_BOT:-}"
 
-# Copy SOUL.md into the dedicated agent workspace
+if [ -z "$BOT_TOKEN" ]; then
+  read -rp "Telegram bot token for logging-bot: " BOT_TOKEN
+fi
+
+# Copy SOUL.md and skills into the dedicated agent workspace
 mkdir -p "$AGENT_WORKSPACE"
 cp "$SCRIPT_DIR/SOUL.md" "$AGENT_WORKSPACE/SOUL.md"
 echo "✓ SOUL.md deployed to $AGENT_WORKSPACE"
+
+# Deploy skills (OpenClaw loads them from <workspace>/skills/)
+if [ -d "$SCRIPT_DIR/skills" ]; then
+  rm -rf "$AGENT_WORKSPACE/skills"
+  cp -r "$SCRIPT_DIR/skills" "$AGENT_WORKSPACE/skills"
+  echo "✓ Skills deployed to $AGENT_WORKSPACE/skills"
+fi
 
 node --input-type=module <<JS
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
@@ -17,7 +29,6 @@ import { dirname } from "path";
 
 const configPath = "$OPENCLAW_CONFIG";
 const fragmentPath = "$SCRIPT_DIR/openclaw-config-fragment.json5";
-const workspace  = "$AGENT_WORKSPACE";
 
 function parseJson5(src) {
   return JSON.parse(
@@ -56,7 +67,8 @@ const existing = existsSync(configPath)
   : {};
 
 const fragment = parseJson5(readFileSync(fragmentPath, "utf8"));
-fragment.agents.list[0].workspace = workspace;
+fragment.agents.list[0].workspace = "$AGENT_WORKSPACE";
+fragment.channels.telegram.accounts["logging-bot"].botToken = "$BOT_TOKEN";
 
 mkdirSync(dirname(configPath), { recursive: true });
 writeFileSync(configPath, JSON.stringify(deepMerge(existing, fragment), null, 2));

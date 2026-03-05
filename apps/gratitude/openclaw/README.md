@@ -2,13 +2,48 @@
 
 This directory contains the OpenClaw agent configuration for the Gratitude Journal.
 
+## Architecture
+
+```
+Telegram UI
+     |
+OpenClaw Skills
+     |
+Exec Tool (bash)          ← /analytics_gratitude: zero LLM tokens
+     |
+Express API
+     |
+Notion Database
+```
+
+Fallback path (conversational commands):
+
+```
+/log_gratitude
+     |
+LLM Agent (Haiku)         ← only for multi-turn conversation
+     |
+Express API (web_fetch)
+     |
+Notion Database
+```
+
+### How it works
+
+- **`/analytics_gratitude`** — handled by the `analytics-gratitude` skill with `command-dispatch: tool`. OpenClaw calls `exec` directly, runs `curl localhost:3000/api/open-claw/analytics`, and returns the plain-text result. **No LLM tokens consumed.**
+- **`/log_gratitude`** — handled by the `log-gratitude` skill with LLM guidance. The skill provides the step-by-step flow instructions; the agent collects user input across 4 turns and POSTs the completed entry.
+
+---
+
 ## Files
 
-| File | Purpose |
+| Path | Purpose |
 |------|---------|
-| `SOUL.md` | Agent instructions — the persona and task definitions loaded into every session |
-| `openclaw-config-fragment.json5` | Partial config that gets merged into `~/.openclaw/openclaw.json` on the server |
-| `install-openclaw.sh` | Installer script — run once on the server to wire everything up |
+| `SOUL.md` | Agent identity — short persona and base URL, loaded every session |
+| `skills/analytics-gratitude/SKILL.md` | Bash-bypass skill: exec curl, no LLM |
+| `skills/log-gratitude/SKILL.md` | LLM-guided 4-step journal flow |
+| `openclaw-config-fragment.json5` | Merged into `~/.openclaw/openclaw.json` on the server |
+| `install-openclaw.sh` | Deploys SOUL.md + skills to workspace, merges config |
 
 ---
 
@@ -25,12 +60,12 @@ bash apps/gratitude/openclaw/install-openclaw.sh
 **1. Create the agent workspace**
 Creates `~/.openclaw/workspace-gratitude/` if it doesn't exist. This is the dedicated directory openclaw uses as the agent's working directory — runtime files like `HEARTBEAT.md`, `BOOTSTRAP.md`, and session memory go here, keeping them out of the repo.
 
-**2. Deploy `SOUL.md`**
-Copies `SOUL.md` from the repo into `~/.openclaw/workspace-gratitude/SOUL.md`. OpenClaw loads this file at the start of every agent session to give the agent its persona and task instructions. The repo copy is the source of truth — re-run the script after editing it.
+**2. Deploy `SOUL.md` and skills**
+Copies `SOUL.md` into `~/.openclaw/workspace-gratitude/SOUL.md` and the `skills/` directory into `~/.openclaw/workspace-gratitude/skills/`. OpenClaw loads `SOUL.md` at every session start and discovers skills from the workspace `skills/` directory. The repo copies are the source of truth — re-run the script after any edits.
 
 **3. Parse the config fragment**
 Reads `openclaw-config-fragment.json5`, strips comments, and parses it as JSON. The fragment defines:
-- The `gratitude` agent entry (id, model, tools)
+- The `gratitude` agent entry (id, model, tools — including `exec` for skill bash dispatch)
 - The Telegram channel binding that routes all Telegram messages to the gratitude agent
 - The two Telegram slash commands (`/log_gratitude`, `/analytics_gratitude`)
 
