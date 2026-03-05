@@ -15,14 +15,14 @@ Use `web_fetch` on `http://localhost:3000/api/open-claw/prompt` (GET).
 - If `alreadyLogged: true` → reply "You've already journaled today." and stop.
 - Otherwise hold `reflectionQuestion` and `reflectionPrompt` from the response.
 
-### Step 2 — Show question + ask for feeling
+### Step 2 — Ask for feeling
 
-Send the user the `reflectionQuestion`, then ask:
+Send the user:
 "How are you feeling today?"
 
 ### Step 3 — Ask for reflection
 
-After they reply with their feeling, ask them to answer the reflection question.
+After they reply with their feeling, ask them the `reflectionQuestion`.
 
 ### Step 4 — Ask for gratitude
 
